@@ -1,35 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const Lesson = () => {
-    const [lessons, setLessons] = useState([
-        { id: 1, name: 'English Poems', class: 'LKG', content: 'Twinkle, twinkle, little star, H' },
-        { id: 2, name: 'Addition', class: 'Nur', content: 'Addition is the fundamental' },
-        { id: 3, name: 'English Poem', class: 'LKG', content: 'Mary had a little lamb, Its fle' }
-    ]);
-
+    const [lessons, setLessons] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newLesson, setNewLesson] = useState({
-        class: '',
-        subject: '',
-        name: '',
+        lessonName: '',
+        className: '',
         content: '',
-        file: null
+        subject: ''
     });
-
     const [editingLesson, setEditingLesson] = useState(null);
     const [viewingLesson, setViewingLesson] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [snackbar, setSnackbar] = useState({ show: false, message: '', type: '' });
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState({ show: false, lessonId: null, lessonName: '' });
+    const [message, setMessage] = useState({ show: false, text: '', type: '' });
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState({
+        show: false,
+        lessonId: null,
+        lessonName: ''
+    });
 
     // Mock data for dropdowns
-    const classes = ['LKG', 'UKG', 'Nur', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'];
-    const subjects = ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi', 'Computer Science', 'Physics', 'Chemistry', 'Biology'];
+    const classes = ['LKG', 'UKG', 'Nur', 'Class 1', 'Class 2', 'Class 3', 'Class 4',
+        'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10',
+        'Class 11', 'Class 12'];
+    const subjects = ['English', 'Mathematics', 'Science', 'Social Studies', 'Hindi',
+        'Computer Science', 'Physics', 'Chemistry', 'Biology'];
 
-    const showSnackbar = (message, type = 'success') => {
-        setSnackbar({ show: true, message, type });
+    // Fetch lessons using useCallback
+    const fetchLessons = useCallback(async () => {
+        try {
+            setLoading(true);
+            const response = await axios.get(`${API_BASE_URL}/lessons`);
+            if (response.data.success) {
+                setLessons(response.data.lessons);
+            }
+        } catch (error) {
+            console.error('Error fetching lessons:', error);
+            showMessage('Error fetching lessons. Make sure backend is running.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchLessons();
+    }, [fetchLessons]);
+
+    const showMessage = (text, type = 'success') => {
+        setMessage({ show: true, text, type });
         setTimeout(() => {
-            setSnackbar({ show: false, message: '', type: '' });
+            setMessage({ show: false, text: '', type: '' });
         }, 3000);
     };
 
@@ -41,60 +65,40 @@ const Lesson = () => {
         }));
     };
 
-    const handleFileChange = (e) => {
-        setNewLesson(prev => ({
-            ...prev,
-            file: e.target.files[0]
-        }));
-    };
+    const handleSaveLesson = async () => {
+        try {
+            if (!newLesson.lessonName || !newLesson.className || !newLesson.content) {
+                showMessage('Please fill all required fields', 'error');
+                return;
+            }
 
-    const handleSaveLesson = () => {
-        if (!newLesson.name || !newLesson.class || !newLesson.content) {
-            showSnackbar('Please fill all required fields', 'error');
-            return;
-        }
+            let response;
+            if (editingLesson) {
+                response = await axios.put(
+                    `${API_BASE_URL}/lessons/${editingLesson._id}`,
+                    newLesson
+                );
 
-        if (editingLesson) {
-            // Update existing lesson
-            setLessons(lessons.map(lesson =>
-                lesson.id === editingLesson.id
-                    ? {
-                        ...lesson,
-                        name: newLesson.name,
-                        class: newLesson.class,
-                        content: newLesson.content.substring(0, 50) + '...',
-                        fullContent: newLesson.content,
-                        subject: newLesson.subject,
-                        fileName: newLesson.file ? newLesson.file.name : lesson.fileName
-                    }
-                    : lesson
-            ));
-            showSnackbar('Lesson updated successfully!');
+                if (response.data.success) {
+                    showMessage('Lesson updated successfully!');
+                }
+            } else {
+                response = await axios.post(`${API_BASE_URL}/lessons`, newLesson);
+
+                if (response.data.success) {
+                    showMessage('Lesson created successfully!');
+                }
+            }
+
+            await fetchLessons();
+            setNewLesson({ lessonName: '', className: '', content: '', subject: '' });
             setEditingLesson(null);
-        } else {
-            // Add new lesson
-            const newLessonObj = {
-                id: lessons.length + 1,
-                name: newLesson.name,
-                class: newLesson.class,
-                content: newLesson.content.substring(0, 50) + '...',
-                fullContent: newLesson.content,
-                subject: newLesson.subject,
-                fileName: newLesson.file ? newLesson.file.name : null
-            };
+            setShowAddForm(false);
 
-            setLessons([...lessons, newLessonObj]);
-            showSnackbar('Lesson saved successfully!');
+        } catch (error) {
+            console.error('Error saving lesson:', error);
+            showMessage('Error saving lesson. Please try again.', 'error');
         }
-
-        setNewLesson({
-            class: '',
-            subject: '',
-            name: '',
-            content: '',
-            file: null
-        });
-        setShowAddForm(false);
     };
 
     const handleViewLesson = (lesson) => {
@@ -103,175 +107,141 @@ const Lesson = () => {
 
     const handleEditLesson = (lesson) => {
         setNewLesson({
-            class: lesson.class,
-            subject: lesson.subject || '',
-            name: lesson.name,
-            content: lesson.fullContent || lesson.content,
-            file: null
+            lessonName: lesson.lessonName,
+            className: lesson.className,
+            content: lesson.content,
+            subject: lesson.subject || ''
         });
         setEditingLesson(lesson);
         setShowAddForm(true);
     };
 
-    const showDeleteConfirmation = (lessonId, lessonName) => {
-        setShowDeleteConfirm({ show: true, lessonId, lessonName });
-    };
-
-    const handleDeleteLesson = () => {
+    const handleDeleteLesson = async () => {
         const { lessonId } = showDeleteConfirm;
-        setLessons(lessons.filter(lesson => lesson.id !== lessonId));
-        showSnackbar('Lesson deleted successfully!');
-        setShowDeleteConfirm({ show: false, lessonId: null, lessonName: '' });
-    };
 
-    const cancelDelete = () => {
+        try {
+            const response = await axios.delete(`${API_BASE_URL}/lessons/${lessonId}`);
+
+            if (response.data.success) {
+                showMessage('Lesson deleted successfully!');
+                await fetchLessons();
+            }
+        } catch (error) {
+            console.error('Error deleting lesson:', error);
+            showMessage('Error deleting lesson', 'error');
+        }
+
         setShowDeleteConfirm({ show: false, lessonId: null, lessonName: '' });
-        showSnackbar('Deletion cancelled', 'info');
     };
 
     const filteredLessons = lessons.filter(lesson =>
-        lesson.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lesson.class.toLowerCase().includes(searchTerm.toLowerCase())
+        lesson.lessonName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lesson.className.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // Updated styles with fixed button position
     const styles = {
         container: {
-            padding: '30px',
-            backgroundColor: '#f8fafc',
-            minHeight: '100vh',
-            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+            padding: '20px',
+            fontFamily: 'Arial, sans-serif',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            minHeight: 'calc(100vh - 40px)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         },
         header: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
             marginBottom: '30px'
         },
         title: {
-            fontSize: '28px',
-            fontWeight: '700',
-            color: '#1a1f36',
-            marginBottom: '8px'
+            fontSize: '24px',
+            fontWeight: 'bold',
+            marginBottom: '5px',
+            color: '#1a237e'
         },
         subtitle: {
             fontSize: '14px',
-            color: '#6b7280'
+            color: '#666',
+            marginBottom: '20px'
         },
         searchContainer: {
             display: 'flex',
-            gap: '20px',
-            alignItems: 'center',
-            marginBottom: '30px'
+            gap: '15px',
+            marginBottom: '30px',
+            alignItems: 'center'
         },
         searchInput: {
-            flex: '1',
+            flex: 1,
             padding: '12px 20px',
-            borderRadius: '10px',
-            border: '1px solid #d1d5db',
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
             fontSize: '14px',
-            backgroundColor: 'white',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-            outline: 'none',
-            '&:focus': {
-                borderColor: '#667eea',
-                boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)'
-            }
+            backgroundColor: '#fafafa'
         },
         addButton: {
-            backgroundColor: '#4CAF50',
+            backgroundColor: '#4caf50',
             color: 'white',
             border: 'none',
             padding: '12px 24px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             cursor: 'pointer',
             fontSize: '14px',
             fontWeight: '600',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.3s',
-            '&:hover': {
-                backgroundColor: '#388E3C',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 4px 15px rgba(76, 175, 80, 0.3)'
-            }
+            gap: '8px'
         },
         tableContainer: {
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-            overflow: 'hidden',
-            marginBottom: '30px'
+            overflowX: 'auto',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0'
         },
         table: {
             width: '100%',
-            borderCollapse: 'collapse'
-        },
-        tableHeader: {
-            backgroundColor: '#f3f4f6',
-            borderBottom: '1px solid #e5e7eb'
+            borderCollapse: 'collapse',
+            minWidth: '800px'
         },
         th: {
+            backgroundColor: '#f5f5f5',
             padding: '16px 20px',
             textAlign: 'left',
+            borderBottom: '2px solid #e0e0e0',
             fontWeight: '600',
-            color: '#374151',
+            color: '#333',
             fontSize: '14px'
         },
         td: {
             padding: '16px 20px',
-            borderBottom: '1px solid #e5e7eb',
+            borderBottom: '1px solid #e0e0e0',
+            verticalAlign: 'top',
             fontSize: '14px',
-            color: '#4b5563'
+            color: '#555'
         },
         actionButtons: {
             display: 'flex',
             gap: '10px'
         },
-        viewButton: {
-            backgroundColor: '#3B82F6',
-            color: 'white',
+        button: {
+            padding: '8px 16px',
             border: 'none',
-            padding: '6px 12px',
             borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: '13px',
             fontWeight: '500',
-            transition: 'all 0.2s',
-            '&:hover': {
-                backgroundColor: '#2563EB',
-                transform: 'translateY(-1px)'
-            }
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+        },
+        viewButton: {
+            backgroundColor: '#2196f3',
+            color: 'white'
         },
         editButton: {
-            backgroundColor: '#10B981',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: '500',
-            transition: 'all 0.2s',
-            '&:hover': {
-                backgroundColor: '#059669',
-                transform: 'translateY(-1px)'
-            }
+            backgroundColor: '#ff9800',
+            color: 'white'
         },
         deleteButton: {
-            backgroundColor: '#EF4444',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: '500',
-            transition: 'all 0.2s',
-            '&:hover': {
-                backgroundColor: '#DC2626',
-                transform: 'translateY(-1px)'
-            }
+            backgroundColor: '#f44336',
+            color: 'white'
         },
         modalOverlay: {
             position: 'fixed',
@@ -279,33 +249,49 @@ const Lesson = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 1000,
+            padding: '20px',
             backdropFilter: 'blur(4px)'
         },
         modalContent: {
             backgroundColor: 'white',
-            borderRadius: '16px',
-            padding: '30px',
-            width: '500px',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: '500px',
             maxHeight: '90vh',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             display: 'flex',
             flexDirection: 'column'
         },
         modalHeader: {
-            marginBottom: '25px',
-            textAlign: 'center'
+            padding: '25px 30px 20px',
+            borderBottom: '2px solid #e8eaf6',
+            flexShrink: 0
         },
         modalTitle: {
-            fontSize: '24px',
-            fontWeight: '700',
-            color: '#1a1f36',
-            marginBottom: '8px'
+            fontSize: '22px',
+            fontWeight: 'bold',
+            color: '#1a237e',
+            margin: 0
+        },
+        modalBody: {
+            padding: '0 30px',
+            overflowY: 'auto',
+            flex: 1,
+            maxHeight: 'calc(90vh - 160px)'
+        },
+        modalFooter: {
+            padding: '20px 30px',
+            backgroundColor: '#f9f9f9',
+            borderTop: '1px solid #eee',
+            position: 'sticky',
+            bottom: 0,
+            flexShrink: 0
         },
         formGroup: {
             marginBottom: '20px'
@@ -314,344 +300,307 @@ const Lesson = () => {
             display: 'block',
             marginBottom: '8px',
             fontWeight: '600',
-            color: '#374151',
+            color: '#444',
             fontSize: '14px'
         },
-        select: {
-            width: '100%',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            border: '1px solid #d1d5db',
-            fontSize: '14px',
-            backgroundColor: 'white',
-            cursor: 'pointer',
-            outline: 'none',
-            '&:focus': {
-                borderColor: '#667eea',
-                boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)'
-            }
+        required: {
+            color: '#f44336'
         },
         input: {
             width: '100%',
             padding: '12px 16px',
+            border: '1px solid #ddd',
             borderRadius: '8px',
-            border: '1px solid #d1d5db',
             fontSize: '14px',
-            outline: 'none',
-            '&:focus': {
-                borderColor: '#667eea',
-                boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)'
-            }
+            backgroundColor: '#fafafa'
         },
         textarea: {
             width: '100%',
             padding: '12px 16px',
+            border: '1px solid #ddd',
             borderRadius: '8px',
-            border: '1px solid #d1d5db',
             fontSize: '14px',
-            minHeight: '120px',
+            minHeight: '150px',
             resize: 'vertical',
-            outline: 'none',
-            '&:focus': {
-                borderColor: '#667eea',
-                boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)'
-            }
+            fontFamily: 'Arial, sans-serif',
+            backgroundColor: '#fafafa'
         },
-        fileInput: {
+        select: {
             width: '100%',
             padding: '12px 16px',
+            border: '1px solid #ddd',
             borderRadius: '8px',
-            border: '2px dashed #d1d5db',
-            backgroundColor: '#f9fafb',
-            textAlign: 'center',
-            cursor: 'pointer',
-            '&:hover': {
-                borderColor: '#667eea',
-                backgroundColor: '#f3f4f6'
-            }
+            fontSize: '14px',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer'
         },
         buttonGroup: {
             display: 'flex',
-            gap: '15px',
-            marginTop: '30px',
-            paddingTop: '15px',
-            borderTop: '1px solid #e5e7eb'
-        },
-        saveButton: {
-            flex: '1',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            padding: '14px',
-            borderRadius: '10px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '600',
-            transition: 'all 0.3s',
-            '&:hover': {
-                backgroundColor: '#388E3C'
-            }
-        },
-        cancelButton: {
-            flex: '1',
-            backgroundColor: '#6b7280',
-            color: 'white',
-            border: 'none',
-            padding: '14px',
-            borderRadius: '10px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '600',
-            transition: 'all 0.3s',
-            '&:hover': {
-                backgroundColor: '#4b5563'
-            }
-        },
-        viewModalContent: {
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            padding: '30px',
-            width: '600px',
-            maxHeight: '80vh',
-            overflowY: 'auto'
-        },
-        lessonContent: {
-            backgroundColor: '#f9fafb',
-            padding: '20px',
-            borderRadius: '8px',
-            marginTop: '15px',
-            border: '1px solid #e5e7eb',
-            whiteSpace: 'pre-wrap',
-            lineHeight: '1.6'
-        },
-        snackbar: {
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            padding: '12px 20px',
-            borderRadius: '8px',
-            color: 'white',
-            fontWeight: '500',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-            zIndex: 2000,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            animation: 'slideIn 0.3s ease-out'
-        },
-        snackbarSuccess: {
-            backgroundColor: '#10B981'
-        },
-        snackbarError: {
-            backgroundColor: '#EF4444'
-        },
-        snackbarInfo: {
-            backgroundColor: '#3B82F6'
-        },
-        snackbarIcon: {
-            fontSize: '18px'
-        },
-        confirmModal: {
-            backgroundColor: 'white',
-            borderRadius: '16px',
-            padding: '30px',
-            width: '400px',
-            textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
-        },
-        confirmTitle: {
-            fontSize: '20px',
-            fontWeight: '700',
-            color: '#1a1f36',
-            marginBottom: '15px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '10px'
-        },
-        confirmMessage: {
-            color: '#6b7280',
-            marginBottom: '25px',
-            fontSize: '15px',
-            lineHeight: '1.6'
-        },
-        confirmButtonGroup: {
-            display: 'flex',
             gap: '15px'
         },
-        confirmDeleteButton: {
-            flex: '1',
-            backgroundColor: '#EF4444',
+        saveButton: {
+            backgroundColor: '#4caf50',
             color: 'white',
+            padding: '14px 24px',
             border: 'none',
-            padding: '12px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             cursor: 'pointer',
             fontSize: '14px',
             fontWeight: '600',
-            transition: 'all 0.3s',
-            '&:hover': {
-                backgroundColor: '#DC2626',
-                transform: 'translateY(-2px)'
-            }
+            flex: 1
         },
-        confirmCancelButton: {
-            flex: '1',
-            backgroundColor: '#6b7280',
+        cancelButton: {
+            backgroundColor: '#757575',
             color: 'white',
+            padding: '14px 24px',
             border: 'none',
-            padding: '12px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             cursor: 'pointer',
             fontSize: '14px',
             fontWeight: '600',
-            transition: 'all 0.3s',
-            '&:hover': {
-                backgroundColor: '#4b5563',
-                transform: 'translateY(-2px)'
-            }
+            flex: 1
+        },
+        message: {
+            position: 'fixed',
+            bottom: '30px',
+            right: '30px',
+            padding: '14px 24px',
+            borderRadius: '8px',
+            color: 'white',
+            zIndex: 1001,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        },
+        loading: {
+            textAlign: 'center',
+            padding: '60px 20px',
+            fontSize: '16px',
+            color: '#666'
+        },
+        noData: {
+            textAlign: 'center',
+            padding: '60px 20px',
+            color: '#999',
+            fontSize: '14px'
+        },
+        viewContent: {
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef',
+            maxHeight: '400px',
+            overflowY: 'auto',
+            whiteSpace: 'pre-wrap',
+            lineHeight: '1.6',
+            fontSize: '14px',
+            marginTop: '10px'
+        },
+        confirmText: {
+            marginBottom: '25px',
+            fontSize: '16px',
+            lineHeight: '1.5',
+            color: '#444',
+            textAlign: 'center'
         },
         warningIcon: {
-            fontSize: '40px',
-            color: '#F59E0B',
-            marginBottom: '15px'
+            fontSize: '48px',
+            color: '#ff9800',
+            textAlign: 'center',
+            marginBottom: '20px'
+        },
+        lessonBadge: {
+            backgroundColor: '#e3f2fd',
+            color: '#1565c0',
+            padding: '4px 12px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: '500',
+            display: 'inline-block'
+        },
+        subjectTag: {
+            backgroundColor: '#f3e5f5',
+            color: '#7b1fa2',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            marginTop: '4px',
+            display: 'inline-block'
+        },
+        deleteModalBody: {
+            textAlign: 'center',
+            padding: '40px 30px'
         }
     };
 
-    // Add animation style
-    useEffect(() => {
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from {
-                    transform: translateX(100%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
-            }
-            @keyframes fadeIn {
-                from {
-                    opacity: 0;
-                    transform: scale(0.9);
-                }
-                to {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-            }
-        `;
-        document.head.appendChild(style);
-        return () => document.head.removeChild(style);
-    }, []);
+    // Add hover effects using inline styles
+    const hoverStyle = `
+    .hover-effect:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+      transition: all 0.3s;
+    }
+    .modal-btn-hover:hover {
+      opacity: 0.9;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #4caf50;
+      box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+    }
+  `;
 
     return (
         <div style={styles.container}>
+            {/* Add CSS styles */}
+            <style>{hoverStyle}</style>
+
             <div style={styles.header}>
-                <div>
-                    <h2 style={styles.title}>Lesson Management</h2>
-                    <p style={styles.subtitle}>Create and manage lessons for different classes</p>
+                <h2 style={styles.title}>Lesson Management</h2>
+                <p style={styles.subtitle}>Create and manage lessons for different classes</p>
+
+                <div style={styles.searchContainer}>
+                    <input
+                        type="text"
+                        placeholder="Search Lessons..."
+                        style={styles.searchInput}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="hover-effect"
+                    />
+                    <button
+                        style={styles.addButton}
+                        onClick={() => {
+                            setNewLesson({
+                                lessonName: '',
+                                className: '',
+                                content: '',
+                                subject: ''
+                            });
+                            setEditingLesson(null);
+                            setShowAddForm(true);
+                        }}
+                        className="hover-effect"
+                    >
+                        <span>+</span>
+                        Add Lesson
+                    </button>
                 </div>
             </div>
 
-            <div style={styles.searchContainer}>
-                <input
-                    type="text"
-                    placeholder="Search Lessons..."
-                    style={styles.searchInput}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <button
-                    style={styles.addButton}
-                    onClick={() => {
-                        setNewLesson({
-                            class: '',
-                            subject: '',
-                            name: '',
-                            content: '',
-                            file: null
-                        });
-                        setEditingLesson(null);
-                        setShowAddForm(true);
-                    }}
-                >
-                    <span>➕</span>
-                    Add Lesson
-                </button>
-            </div>
-
             <div style={styles.tableContainer}>
-                <table style={styles.table}>
-                    <thead style={styles.tableHeader}>
-                        <tr>
-                            <th style={styles.th}>Lesson Name</th>
-                            <th style={styles.th}>Class</th>
-                            <th style={styles.th}>Content</th>
-                            <th style={styles.th}>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredLessons.length > 0 ? (
-                            filteredLessons.map(lesson => (
-                                <tr key={lesson.id}>
-                                    <td style={styles.td}>{lesson.name}</td>
-                                    <td style={styles.td}>{lesson.class}</td>
-                                    <td style={styles.td}>{lesson.content}</td>
-                                    <td style={styles.td}>
-                                        <div style={styles.actionButtons}>
-                                            <button
-                                                style={styles.viewButton}
-                                                onClick={() => handleViewLesson(lesson)}
-                                            >
-                                                View
-                                            </button>
-                                            <button
-                                                style={styles.editButton}
-                                                onClick={() => handleEditLesson(lesson)}
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                style={styles.deleteButton}
-                                                onClick={() => showDeleteConfirmation(lesson.id, lesson.name)}
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
+                {loading ? (
+                    <div style={styles.loading}>Loading lessons...</div>
+                ) : (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr>
+                                <th style={styles.th}>Lesson Name</th>
+                                <th style={styles.th}>Class</th>
+                                <th style={styles.th}>Subject</th>
+                                <th style={styles.th}>Content Preview</th>
+                                <th style={styles.th}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredLessons.length > 0 ? (
+                                filteredLessons.map((lesson) => (
+                                    <tr key={lesson._id}>
+                                        <td style={styles.td}>
+                                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                                                {lesson.lessonName}
+                                            </div>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <span style={styles.lessonBadge}>
+                                                {lesson.className}
+                                            </span>
+                                        </td>
+                                        <td style={styles.td}>
+                                            {lesson.subject && (
+                                                <span style={styles.subjectTag}>
+                                                    {lesson.subject}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td style={styles.td}>
+                                            <div style={{ color: '#666', lineHeight: '1.4' }}>
+                                                {lesson.content.length > 80
+                                                    ? lesson.content.substring(0, 80) + '...'
+                                                    : lesson.content}
+                                            </div>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <div style={styles.actionButtons}>
+                                                <button
+                                                    style={{ ...styles.button, ...styles.viewButton }}
+                                                    onClick={() => handleViewLesson(lesson)}
+                                                    className="hover-effect"
+                                                    title="View Lesson"
+                                                >
+                                                    👁️ View
+                                                </button>
+                                                <button
+                                                    style={{ ...styles.button, ...styles.editButton }}
+                                                    onClick={() => handleEditLesson(lesson)}
+                                                    className="hover-effect"
+                                                    title="Edit Lesson"
+                                                >
+                                                    ✏️ Edit
+                                                </button>
+                                                <button
+                                                    style={{ ...styles.button, ...styles.deleteButton }}
+                                                    onClick={() => setShowDeleteConfirm({
+                                                        show: true,
+                                                        lessonId: lesson._id,
+                                                        lessonName: lesson.lessonName
+                                                    })}
+                                                    className="hover-effect"
+                                                    title="Delete Lesson"
+                                                >
+                                                    🗑️ Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="5" style={styles.noData}>
+                                        {searchTerm
+                                            ? `No lessons found for "${searchTerm}"`
+                                            : 'No lessons available. Click "Add Lesson" to create your first lesson!'}
                                     </td>
                                 </tr>
-                            ))
-                        ) : (
-                            <tr>
-                                <td colSpan="4" style={{ ...styles.td, textAlign: 'center' }}>
-                                    No lessons found
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                            )}
+                        </tbody>
+                    </table>
+                )}
             </div>
 
+            {/* Add/Edit Form Modal with fixed buttons */}
             {showAddForm && (
                 <div style={styles.modalOverlay} onClick={() => setShowAddForm(false)}>
                     <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <h3 style={styles.modalTitle}>
-                                {editingLesson ? 'Edit Lesson' : 'Add Lesson'}
+                                {editingLesson ? '✏️ Edit Lesson' : '➕ Add New Lesson'}
                             </h3>
                         </div>
 
-                        <div style={{ flex: '1', overflowY: 'auto', paddingRight: '5px' }}>
+                        <div style={styles.modalBody}>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>Class</label>
+                                <label style={styles.label}>
+                                    Class <span style={styles.required}>*</span>
+                                </label>
                                 <select
                                     style={styles.select}
-                                    name="class"
-                                    value={newLesson.class}
+                                    name="className"
+                                    value={newLesson.className}
                                     onChange={handleInputChange}
+                                    required
+                                    className="hover-effect"
                                 >
                                     <option value="">Select Class</option>
                                     {classes.map(cls => (
@@ -661,12 +610,13 @@ const Lesson = () => {
                             </div>
 
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>Subject</label>
+                                <label style={styles.label}>Subject (Optional)</label>
                                 <select
                                     style={styles.select}
                                     name="subject"
                                     value={newLesson.subject}
                                     onChange={handleInputChange}
+                                    className="hover-effect"
                                 >
                                     <option value="">Select Subject</option>
                                     {subjects.map(subject => (
@@ -676,152 +626,192 @@ const Lesson = () => {
                             </div>
 
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>Lesson Name</label>
+                                <label style={styles.label}>
+                                    Lesson Name <span style={styles.required}>*</span>
+                                </label>
                                 <input
                                     type="text"
                                     style={styles.input}
-                                    name="name"
+                                    name="lessonName"
                                     placeholder="Enter Lesson Name"
-                                    value={newLesson.name}
+                                    value={newLesson.lessonName}
                                     onChange={handleInputChange}
+                                    required
+                                    className="hover-effect"
                                 />
                             </div>
 
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>Lesson Content</label>
+                                <label style={styles.label}>
+                                    Lesson Content <span style={styles.required}>*</span>
+                                </label>
                                 <textarea
                                     style={styles.textarea}
                                     name="content"
-                                    placeholder="Enter Lesson Content"
+                                    placeholder="Enter detailed lesson content here..."
                                     value={newLesson.content}
                                     onChange={handleInputChange}
+                                    required
+                                    className="hover-effect"
                                 />
-                            </div>
-
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>Lesson Path (Max 2 MB, PDF only)</label>
-                                <input
-                                    type="file"
-                                    style={styles.fileInput}
-                                    accept=".pdf"
-                                    onChange={handleFileChange}
-                                />
-                                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
-                                    {newLesson.file ? newLesson.file.name : 'No file chosen'}
-                                </div>
                             </div>
                         </div>
 
-                        <div style={styles.buttonGroup}>
-                            <button
-                                style={styles.saveButton}
-                                onClick={handleSaveLesson}
-                            >
-                                {editingLesson ? 'Update Lesson' : 'Save Lesson'}
-                            </button>
-                            <button
-                                style={styles.cancelButton}
-                                onClick={() => setShowAddForm(false)}
-                            >
-                                Cancel
-                            </button>
+                        {/* Fixed Footer with Buttons - Always visible */}
+                        <div style={styles.modalFooter}>
+                            <div style={styles.buttonGroup}>
+                                <button
+                                    style={styles.saveButton}
+                                    onClick={handleSaveLesson}
+                                    className="modal-btn-hover"
+                                >
+                                    {editingLesson ? 'Update Lesson' : 'Save Lesson'}
+                                </button>
+                                <button
+                                    style={styles.cancelButton}
+                                    onClick={() => setShowAddForm(false)}
+                                    className="modal-btn-hover"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* View Lesson Modal */}
             {viewingLesson && (
                 <div style={styles.modalOverlay} onClick={() => setViewingLesson(null)}>
-                    <div style={styles.viewModalContent} onClick={(e) => e.stopPropagation()}>
+                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
-                            <h3 style={styles.modalTitle}>{viewingLesson.name}</h3>
+                            <h3 style={styles.modalTitle}>📚 {viewingLesson.lessonName}</h3>
                         </div>
 
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Class</label>
-                            <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
-                                {viewingLesson.class}
-                            </div>
-                        </div>
-
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Subject</label>
-                            <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
-                                {viewingLesson.subject || 'Not specified'}
-                            </div>
-                        </div>
-
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Content</label>
-                            <div style={styles.lessonContent}>
-                                {viewingLesson.fullContent || viewingLesson.content}
-                            </div>
-                        </div>
-
-                        {viewingLesson.fileName && (
+                        <div style={styles.modalBody}>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>Attached File</label>
-                                <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
-                                    📄 {viewingLesson.fileName}
+                                <label style={styles.label}>Class</label>
+                                <div style={{
+                                    padding: '12px 16px',
+                                    backgroundColor: '#e8f5e9',
+                                    borderRadius: '8px',
+                                    color: '#2e7d32',
+                                    fontWeight: '600',
+                                    fontSize: '15px'
+                                }}>
+                                    {viewingLesson.className}
                                 </div>
                             </div>
-                        )}
 
-                        <div style={{ ...styles.buttonGroup, justifyContent: 'center' }}>
-                            <button
-                                style={styles.cancelButton}
-                                onClick={() => setViewingLesson(null)}
-                            >
-                                Close
-                            </button>
+                            {viewingLesson.subject && (
+                                <div style={styles.formGroup}>
+                                    <label style={styles.label}>Subject</label>
+                                    <div style={{
+                                        padding: '12px 16px',
+                                        backgroundColor: '#f3e5f5',
+                                        borderRadius: '8px',
+                                        color: '#7b1fa2',
+                                        fontWeight: '500'
+                                    }}>
+                                        {viewingLesson.subject}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>Lesson Content</label>
+                                <div style={styles.viewContent}>
+                                    {viewingLesson.content}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={styles.modalFooter}>
+                            <div style={styles.buttonGroup}>
+                                <button
+                                    style={{ ...styles.cancelButton, backgroundColor: '#5c6bc0', flex: 1 }}
+                                    onClick={() => setViewingLesson(null)}
+                                    className="modal-btn-hover"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* Delete Confirmation Modal */}
             {showDeleteConfirm.show && (
-                <div style={styles.modalOverlay} onClick={cancelDelete}>
-                    <div style={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
-                        <div style={styles.warningIcon}>⚠️</div>
-                        <h3 style={styles.confirmTitle}>Delete Confirmation</h3>
-                        <p style={styles.confirmMessage}>
-                            Are you sure you want to delete the lesson:<br />
-                            <strong style={{ color: '#1a1f36' }}>"{showDeleteConfirm.lessonName}"</strong>?
-                        </p>
-                        <p style={{ ...styles.confirmMessage, fontSize: '13px', color: '#9ca3af' }}>
-                            This action cannot be undone.
-                        </p>
-                        <div style={styles.confirmButtonGroup}>
-                            <button
-                                style={styles.confirmCancelButton}
-                                onClick={cancelDelete}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                style={styles.confirmDeleteButton}
-                                onClick={handleDeleteLesson}
-                            >
-                                Delete
-                            </button>
+                <div style={styles.modalOverlay} onClick={() => setShowDeleteConfirm({ show: false, lessonId: null, lessonName: '' })}>
+                    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.deleteModalBody}>
+                            <div style={styles.warningIcon}>⚠️</div>
+                            <h3 style={{ ...styles.modalTitle, textAlign: 'center', color: '#d32f2f' }}>Confirm Delete</h3>
+                            <div style={styles.confirmText}>
+                                Are you sure you want to delete the lesson:<br />
+                                <strong style={{ color: '#d32f2f', fontSize: '17px', marginTop: '10px', display: 'inline-block' }}>
+                                    "{showDeleteConfirm.lessonName}"?
+                                </strong>
+                            </div>
+                            <p style={{ fontSize: '14px', color: '#757575', marginBottom: '25px' }}>
+                                This action cannot be undone. All lesson data will be permanently deleted.
+                            </p>
+                        </div>
+
+                        <div style={styles.modalFooter}>
+                            <div style={styles.buttonGroup}>
+                                <button
+                                    style={styles.cancelButton}
+                                    onClick={() => setShowDeleteConfirm({ show: false, lessonId: null, lessonName: '' })}
+                                    className="modal-btn-hover"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    style={{ ...styles.saveButton, backgroundColor: '#d32f2f' }}
+                                    onClick={handleDeleteLesson}
+                                    className="modal-btn-hover"
+                                >
+                                    Delete Permanently
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {snackbar.show && (
+            {/* Success/Error Message */}
+            {message.show && (
                 <div style={{
-                    ...styles.snackbar,
-                    ...(snackbar.type === 'error' ? styles.snackbarError :
-                        snackbar.type === 'info' ? styles.snackbarInfo : styles.snackbarSuccess)
+                    ...styles.message,
+                    backgroundColor: message.type === 'error' ? '#d32f2f' :
+                        message.type === 'warning' ? '#ff9800' : '#4caf50',
+                    animation: 'slideIn 0.3s ease-out'
                 }}>
-                    <span style={styles.snackbarIcon}>
-                        {snackbar.type === 'error' ? '❌' :
-                            snackbar.type === 'info' ? 'ℹ️' : '✅'}
+                    <span style={{ fontSize: '18px' }}>
+                        {message.type === 'error' ? '❌' :
+                            message.type === 'warning' ? '⚠️' : '✅'}
                     </span>
-                    {snackbar.message}
+                    {message.text}
                 </div>
             )}
+
+            {/* Add slideIn animation */}
+            <style>
+                {`
+          @keyframes slideIn {
+            from {
+              transform: translateX(100%);
+              opacity: 0;
+            }
+            to {
+              transform: translateX(0);
+              opacity: 1;
+            }
+          }
+        `}
+            </style>
         </div>
     );
 };
